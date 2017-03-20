@@ -2,6 +2,7 @@ define([
     "esri/map",
     "esri/arcgis/utils",
     "esri/geometry/Point",
+    "esri/views/MapView",
     "dojo/_base/declare",
     "dojo/on",
     "dojo/touch",
@@ -53,7 +54,7 @@ define([
             // SmartResizer Class Functions
             _smartResizer: declare(null, {
                 constructor: function (mapDivId, options) {
-                    this._map = null;
+                    this._mapView = null;
                     this._autoRecenterDelay =  50;
                     this._popupRecenterDelayer = 150;
                     this._popupPosition = "top";
@@ -84,11 +85,23 @@ define([
                                 autoResize: false
                             });
                     }
-                    this._map = new Map(this._mapDivId, this._options);
+                    var tileLayer = new TileLayer({
+                      url: "//tiles.arcgis.com/tiles/13gIhioIJ7adPQpM/arcgis/rest/services/DevSummit2016_Basemap_Level1/MapServer"
+                    });
+
+                    this._mapView = new Map({
+                      layers: [tileLayer]
+                    });
+
+                    this._mapView = new MapView({
+                      container: this._mapDivId,
+                      map: this._mapView
+                    });
+
                     this._setPopup();
                     this._bindEvents();
-                    this._mapDiv.__map = this._map;
-                    return this._map;
+                    this._mapDiv.__map = this._mapView;
+                    return this._mapView;
                 },
                 // Create the webmap for client
                 createWebMap: function (webMapId) {
@@ -114,40 +127,40 @@ define([
                     myselfAsAResizer = this;
                     // Callback to get map
                     getDeferred = function (response) {
-                        this._map = response.map;
+                        this._mapView = response.map;
                         this._setPopup();
                         this._bindEvents();
-                        this._mapDiv.__map = this._map;
+                        this._mapDiv.__map = this._mapView;
                         this._smartResizer = myselfAsAResizer;
                         this._smartResizer._setMapDiv(true);
-                        this._map._smartResizer = this._smartResizer;
+                        this._mapView._smartResizer = this._smartResizer;
                     };
                     this._mapDeferred.then(lang.hitch(this, getDeferred));
                     return deferred;
                 },
                 _setPopup: function () {
-                    domClass.add(this._map.infoWindow.domNode, "light");
+                    domClass.add(this._mapView.infoWindow.domNode, "light");
                 },
                 // Avoid undesirable behaviors on touch devices
                 _setTouchBehavior: function () {
                     // Add desireable touch behaviors here
                     if (this._options.hasOwnProperty("scrollWheelZoom")) {
                         if (this._options.scrollWheelZoom) {
-                            this._map.enableScrollWheelZoom();
+                            this._mapView.enableScrollWheelZoom();
                         } else {
-                            this._map.disableScrollWheelZoom();  // Prevent slippy map on scroll
+                            this._mapView.disableScrollWheelZoom();  // Prevent slippy map on scroll
                         }
                     } else {
                         // Default
-                        this._map.disableScrollWheelZoom();
+                        this._mapView.disableScrollWheelZoom();
                     }
                     // Remove 300ms delay to close infoWindow on touch devices
                     on(query(".esriPopup .titleButton.close"), touch.press, lang.hitch(this,
                         function () {
-                            this._map.infoWindow.hide();
+                            this._mapView.infoWindow.hide();
                         }));
                 },
-                // Set up listeners 
+                // Set up listeners
                 _bindEvents: function () {
                     var setTouch,
                         setInfoWin,
@@ -157,7 +170,7 @@ define([
                         resizeWin,
                         recenter,
                         timer;
-                    if (!this._map) {
+                    if (!this._mapView) {
                         console.error("BootstrapMap: Invalid map object. Please check map reference.");
                         return;
                     }
@@ -165,14 +178,14 @@ define([
                     setTouch = function () {
                         this._setTouchBehavior();
                     };
-                    if (this._map.loaded) {
+                    if (this._mapView.loaded) {
                         lang.hitch(this, setTouch).call();
                     } else {
-                        this._handles.push(on(this._map, "load", lang.hitch(this, setTouch)));
+                        this._handles.push(on(this._mapView, "load", lang.hitch(this, setTouch)));
                     }
                     // InfoWindow restyle and reposition
                     setInfoWin = function () {
-                        this._map.infoWindow.anchor = this._popupPosition;
+                        this._mapView.infoWindow.anchor = this._popupPosition;
                         var updatePopup = function (obj) {
                             var pt = obj._map.infoWindow.location;
                             if (pt && !obj._popupBlocked) {
@@ -186,29 +199,29 @@ define([
                         };
                         this.counter = 0;
                         // When map is clicked (no feature or graphic)
-                        this._map.on("click", lang.hitch(this, function () {
-                            if (this._map.infoWindow.isShowing) {
+                        this._mapView.on("click", lang.hitch(this, function () {
+                            if (this._mapView.infoWindow.isShowing) {
                                 updatePopup(this);
                             }
                         }));
                         // When graphics are clicked
-                        on(this._map.graphics, "click", lang.hitch(this, function () {
+                        on(this._mapView.graphics, "click", lang.hitch(this, function () {
                             updatePopup(this);
                         }));
                         // When infowindow appears
-                        on(this._map.infoWindow, "show", lang.hitch(this, function () {
+                        on(this._mapView.infoWindow, "show", lang.hitch(this, function () {
                             updatePopup(this);
                         }));
                         // FeatureLayers selection changed - No longer needed at 3.9
-                        // on(this._map.infoWindow, "selection-change", lang.hitch(this, function (g) {
+                        // on(this._mapView.infoWindow, "selection-change", lang.hitch(this, function (g) {
                         //   updatePopup(this);
                         // }));
                     };
                     // If the map is already loaded, eg. webmap, just hitch up
-                    if (this._map.loaded) {
+                    if (this._mapView.loaded) {
                         lang.hitch(this, setInfoWin).call();
                     } else {
-                        this._handles.push(on(this._map, "load", lang.hitch(this, setInfoWin)));
+                        this._handles.push(on(this._mapView, "load", lang.hitch(this, setInfoWin)));
                     }
                     // Debounce window resize
                     debounce = function (func, threshold, execAsap) {
@@ -235,14 +248,14 @@ define([
                     // Auto-center map
                     if (this._autoRecenter) {
                         recenter = function () {
-                            this._map.__resizeCenter = this._map.extent.getCenter();
+                            this._mapView.__resizeCenter = this._mapView.extent.getCenter();
                             timer = function () {
-                                this._map.centerAt(this._map.__resizeCenter);
+                                this._mapView.centerAt(this._mapView.__resizeCenter);
                             };
                             setTimeout(lang.hitch(this, timer), this._autoRecenterDelay);
                         };
                         // Listen for container resize
-                        this._handles.push(on(this._map, "resize", lang.hitch(this, recenter)));
+                        this._handles.push(on(this._mapView, "resize", lang.hitch(this, recenter)));
                     }
                 },
                 // Check if the map is really visible
@@ -318,12 +331,12 @@ define([
                             "width": "auto"
                         });
                         // Force resize and reposition
-                        if (this._map && forceResize && this._visible) {
-                            this._map.resize();
-                            this._map.reposition();
+                        if (this._mapView && forceResize && this._visible) {
+                            this._mapView.resize();
+                            this._mapView.reposition();
                         }
-                        //console.log("Win:" + windowH + " Body:" + bodyH + " Room:" + room + " 
-                        // OldMap:" + mapH + " Map+Room:" + mh1 + " NewMap:" + mh2 + " ColH:" + 
+                        //console.log("Win:" + windowH + " Body:" + bodyH + " Room:" + room + "
+                        // OldMap:" + mapH + " Map+Room:" + mh1 + " NewMap:" + mh2 + " ColH:" +
                         // colH + " inCol:" + inCol);
                     }
                 },
@@ -337,7 +350,7 @@ define([
                         h = p + g + bodyH + this._mapDiv.clientHeight;
                   return h;
                 },
-                // Get the column height around the map 
+                // Get the column height around the map
                 _calcColumnHeight: function (mapH) {
                     var i,
                         col,
@@ -359,25 +372,25 @@ define([
                 // Reposition map to fix popup
                 _repositionMapForInfoWin: function (graphicCenterPt) {
                     // Determine the upper right, and center, coordinates of the map
-                    var maxPoint = new Point(this._map.extent.xmax, this._map.extent.ymax, this._map.spatialReference),
-                        centerPoint = new Point(this._map.extent.getCenter()),
+                    var maxPoint = new Point(this._mapView.extent.xmax, this._mapView.extent.ymax, this._mapView.spatialReference),
+                        centerPoint = new Point(this._mapView.extent.getCenter()),
                         // Convert to screen coordinates
-                        maxPointScreen = this._map.toScreen(maxPoint),
-                        centerPointScreen = this._map.toScreen(centerPoint),
-                        graphicPointScreen = this._map.toScreen(graphicCenterPt), // Points only
+                        maxPointScreen = this._mapView.toScreen(maxPoint),
+                        centerPointScreen = this._mapView.toScreen(centerPoint),
+                        graphicPointScreen = this._mapView.toScreen(graphicCenterPt), // Points only
                         // Buffer
                         marginLR = 10,
                         marginTop = 3,
-                        infoWin = this._map.infoWindow.domNode.childNodes[0],
+                        infoWin = this._mapView.infoWindow.domNode.childNodes[0],
                         infoWidth = infoWin.clientWidth,
-                        infoHeight = infoWin.clientHeight + this._map.infoWindow.marginTop,
+                        infoHeight = infoWin.clientHeight + this._mapView.infoWindow.marginTop,
                         // X
                         lOff = graphicPointScreen.x - infoWidth / 2,
                         rOff = graphicPointScreen.x + infoWidth / 2,
                         l = lOff - marginLR < 0,
                         r = rOff > maxPointScreen.x - marginLR,
                         // Y
-                        yOff = this._map.infoWindow.offsetY,
+                        yOff = this._mapView.infoWindow.offsetY,
                         tOff = graphicPointScreen.y - infoHeight - yOff,
                         t = tOff - marginTop < 0;
                     // X
@@ -391,10 +404,10 @@ define([
                         centerPointScreen.y += tOff - marginTop;
                     }
 
-                    //Pan the ap to the new centerpoint  
+                    //Pan the ap to the new centerpoint
                     if (r || l || t) {
-                        centerPoint = this._map.toMap(centerPointScreen);
-                        this._map.centerAt(centerPoint);
+                        centerPoint = this._mapView.toMap(centerPointScreen);
+                        this._mapView.centerAt(centerPoint);
                     }
                 }
             }) // _smartResizer
